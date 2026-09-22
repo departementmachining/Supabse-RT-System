@@ -813,10 +813,7 @@
         formInv: { id: null, nama: '', jumlah: 1, kondisi: 'Baik' },
         newInfo: { judul: '', isi: '' },
 
-        wargaList: JSON.parse(localStorage.getItem('rt_warga')) || [
-          { id: 1, nama: 'Budi Santoso', nik: '3171012304850001', kk: '3171012304850099', blok: 'A', noRumah: '12', hubungan: 'Kepala Keluarga', hp: '081234567890', statusRumah: 'Pribadi', iuran: 'Lunas' },
-          { id: 2, nama: 'Siti Aminah', nik: '3171012304850002', kk: '3171012304850099', blok: 'A', noRumah: '12', hubungan: 'Istri', hp: '081234567891', statusRumah: 'Pribadi', iuran: 'Lunas' }
-        ],
+        wargaList: [],
         kasList: JSON.parse(localStorage.getItem('rt_kas')) || [
           { id: 1, tanggal: '2026-09-01', jenis: 'Masuk', keterangan: 'Iuran Kas Bulanan Warga', jumlah: 1500000 },
           { id: 2, tanggal: '2026-09-05', jenis: 'Keluar', keterangan: 'Pembelian Lampu Jalan RT', jumlah: 350000 }
@@ -836,7 +833,7 @@
           // Cek apakah sudah ada sesi login Supabase aktif (misal setelah refresh halaman)
           const { data: { session } } = await supabaseClient.auth.getSession();
           this.isLoggedIn = !!session;
-          if (this.isLoggedIn) this.$nextTick(() => { lucide.createIcons(); this.renderChart(); });
+          if (this.isLoggedIn) { await this.loadSemuaData(); this.$nextTick(() => { lucide.createIcons(); this.renderChart(); }); }
 
           // Pantau perubahan status login (login/logout/token expired) secara real-time
           supabaseClient.auth.onAuthStateChange((event, session) => {
@@ -845,7 +842,7 @@
 
           if (this.migrasiKoordinator()) localStorage.setItem('rt_koordinator', JSON.stringify(this.koordinatorList));
           // Simpan otomatis ke localStorage agar terbaca oleh portal warga
-          this.$watch('wargaList', val => localStorage.setItem('rt_warga', JSON.stringify(val)));
+          // wargaList sekarang disinkronkan langsung ke Supabase lewat addWarga/updateWarga/dst (bukan localStorage lagi)
           this.$watch('kasList', val => { localStorage.setItem('rt_kas', JSON.stringify(val)); this.renderChart(); });
           this.$watch('inventarisList', val => localStorage.setItem('rt_inv', JSON.stringify(val)));
           this.$watch('pengumumanList', val => localStorage.setItem('rt_pengumuman', JSON.stringify(val)));
@@ -944,6 +941,37 @@
           this.$nextTick(() => lucide.createIcons());
         },
 
+        /* ---------- Sinkronisasi tabel `warga` dengan Supabase ---------- */
+        // Kolom di Supabase pakai snake_case (no_rumah, status_rumah), di JS pakai camelCase (noRumah, statusRumah)
+        wargaFromRow(row) {
+          return {
+            id: row.id, nama: row.nama, nik: row.nik, kk: row.kk, blok: row.blok || '',
+            noRumah: row.no_rumah || '', statusRumah: row.status_rumah || 'Pribadi',
+            hubungan: row.hubungan, hp: row.hp || '', iuran: row.iuran || 'Belum Bayar'
+          };
+        },
+        wargaToRow(w) {
+          const row = {
+            nama: w.nama, nik: w.nik, kk: w.kk, blok: w.blok || null,
+            no_rumah: w.noRumah || null, status_rumah: w.statusRumah || 'Pribadi',
+            hubungan: w.hubungan, hp: w.hp || null, iuran: w.iuran || 'Belum Bayar'
+          };
+          // Sertakan id hanya jika sudah berupa uuid asli dari Supabase (bukan id sementara Date.now())
+          if (w.id && typeof w.id === 'string' && w.id.includes('-')) row.id = w.id;
+          return row;
+        },
+        async loadWarga() {
+          const { data, error } = await supabaseClient.from('warga').select('*').order('created_at', { ascending: true });
+          if (error) { console.error('Gagal memuat data warga:', error); alert('Gagal memuat data warga: ' + error.message); return; }
+          this.wargaList = (data || []).map(this.wargaFromRow);
+        },
+        async loadSemuaData() {
+          // Untuk saat ini hanya data warga yang disinkronkan dengan Supabase (data paling sensitif).
+          // kas, inventaris, pengumuman, koordinator masih memakai localStorage seperti semula.
+          await this.loadWarga();
+          this.$nextTick(() => { lucide.createIcons(); this.renderChart(); });
+        },
+
         /* ---------- Auth ---------- */
         async loginAdmin() {
           this.loginError = '';
@@ -959,12 +987,14 @@
           }
           this.isLoggedIn = true;
           this.loginForm.password = ''; // jangan simpan password di memory lebih lama dari perlu
+          await this.loadSemuaData();
           this.$nextTick(() => { lucide.createIcons(); this.renderChart(); });
         },
         async logout() {
           await supabaseClient.auth.signOut();
           this.isLoggedIn = false;
           this.loginForm = { email: '', password: '' };
+          this.wargaList = []; // bersihkan data sensitif dari memory setelah logout
         },
 
         /* ---------- Helper ---------- */
@@ -1048,26 +1078,29 @@
           this.errorWarga = '';
           if (this.formWarga.editKK) this.updateWarga(); else this.addWarga();
         },
-        addWarga() {
+        async addWarga() {
           const f = this.formWarga;
           const base = { kk: f.kk.trim(), blok: f.blok.trim().toUpperCase(), noRumah: f.noRumah.trim(), hp: f.hp, statusRumah: f.statusRumah || 'Pribadi', iuran: 'Lunas' };
           const baru = [];
-          const nid = () => this.newId();
-          baru.push({ id: nid(), nama: f.kepala.nama, nik: f.kepala.nik, hubungan: 'Kepala Keluarga', ...base });
-          f.istri.forEach((i, n) => baru.push({ id: nid(), nama: i.nama, nik: i.nik, hubungan: f.istri.length > 1 ? 'Istri ' + (n + 1) : 'Istri', ...base }));
-          f.anak.forEach((a, n) => baru.push({ id: nid(), nama: a.nama, nik: (a.nik || '').trim(), hubungan: f.anak.length > 1 ? 'Anak ' + (n + 1) : 'Anak', ...base }));
-          this.wargaList = [...this.wargaList, ...baru];
+          baru.push({ nama: f.kepala.nama, nik: f.kepala.nik, hubungan: 'Kepala Keluarga', ...base });
+          f.istri.forEach((i, n) => baru.push({ nama: i.nama, nik: i.nik, hubungan: f.istri.length > 1 ? 'Istri ' + (n + 1) : 'Istri', ...base }));
+          f.anak.forEach((a, n) => baru.push({ nama: a.nama, nik: (a.nik || '').trim(), hubungan: f.anak.length > 1 ? 'Anak ' + (n + 1) : 'Anak', ...base }));
+
+          const rows = baru.map(this.wargaToRow);
+          const { error } = await supabaseClient.from('warga').insert(rows);
+          if (error) { this.errorWarga = 'Gagal menyimpan: ' + error.message; return; }
+          await this.loadWarga();
           this.showModalWarga = false;
         },
         // Simpan perubahan: anggota lama dipertahankan id-nya, anggota baru dibuatkan id, yang dihapus dari form ikut hilang
-        updateWarga() {
+        async updateWarga() {
           const f = this.formWarga;
           const kkLama = f.editKK;
           const kkBaru = f.kk.trim();
           const iuranLama = (this.kepalaOf(kkLama) || {}).iuran || 'Lunas';
           const base = { kk: kkBaru, blok: f.blok.trim().toUpperCase(), noRumah: f.noRumah.trim(), hp: f.hp, statusRumah: f.statusRumah || 'Pribadi' };
           const buat = (orang, hubungan) => ({
-            id: orang.id || this.newId(), nama: orang.nama.trim(), nik: (orang.nik || '').trim(), hubungan,
+            nama: orang.nama.trim(), nik: (orang.nik || '').trim(), hubungan,
             iuran: orang.iuran || iuranLama, ...base
           });
           const barisBaru = [];
@@ -1075,12 +1108,14 @@
           f.istri.forEach((i, n) => barisBaru.push(buat(i, f.istri.length > 1 ? 'Istri ' + (n + 1) : 'Istri')));
           f.anak.forEach((a, n) => barisBaru.push(buat(a, f.anak.length > 1 ? 'Anak ' + (n + 1) : 'Anak')));
 
-          // Ganti posisi keluarga lama di daftar dengan barisBaru (urutan keluarga lain tidak berubah)
-          const sisa = this.wargaList.filter(w => w.kk !== kkLama);
-          const posisi = this.wargaList.findIndex(w => w.kk === kkLama);
-          const daftar = [...sisa];
-          daftar.splice(Math.min(posisi < 0 ? daftar.length : posisi, daftar.length), 0, ...barisBaru);
-          this.wargaList = daftar;
+          // Hapus seluruh baris lama untuk KK ini, lalu insert ulang barisan baru (lebih sederhana & aman
+          // daripada mencocokkan satu per satu anggota yang ditambah/dihapus/diubah).
+          const { error: delErr } = await supabaseClient.from('warga').delete().eq('kk', kkLama);
+          if (delErr) { this.errorWarga = 'Gagal menyimpan perubahan: ' + delErr.message; return; }
+          const { error: insErr } = await supabaseClient.from('warga').insert(barisBaru.map(this.wargaToRow));
+          if (insErr) { this.errorWarga = 'Gagal menyimpan perubahan: ' + insErr.message; return; }
+
+          await this.loadWarga();
 
           // Koordinator merujuk keluarga lewat No. KK: bila No. KK berubah, rujukan ikut diperbarui
           if (kkBaru !== kkLama) {
@@ -1089,19 +1124,28 @@
           }
           this.showModalWarga = false;
         },
-        deleteKeluarga(kk) {
+        async deleteKeluarga(kk) {
           const jumlah = this.anggotaKK(kk).length;
           if (!confirm('Hapus seluruh keluarga ini (' + jumlah + ' orang)? Tindakan ini tidak bisa dibatalkan.')) return;
-          this.wargaList = this.wargaList.filter(w => w.kk !== kk);
+          const { error } = await supabaseClient.from('warga').delete().eq('kk', kk);
+          if (error) { alert('Gagal menghapus: ' + error.message); return; }
+          await this.loadWarga();
           this.koordinatorList = this.koordinatorList.map(k => (k.wargaKK || []).includes(kk) ? { ...k, wargaKK: k.wargaKK.filter(x => x !== kk) } : k);
           if (this.detailKK === kk) this.detailKK = null;
         },
-        deleteAnggota(id) {
+        async deleteAnggota(id) {
           if (!confirm('Hapus anggota keluarga ini?')) return;
-          this.wargaList = this.wargaList.filter(w => w.id !== id);
+          const { error } = await supabaseClient.from('warga').delete().eq('id', id);
+          if (error) { alert('Gagal menghapus: ' + error.message); return; }
+          await this.loadWarga();
         },
-        toggleIuran(id) {
-          this.wargaList = this.wargaList.map(w => w.id === id ? { ...w, iuran: w.iuran === 'Lunas' ? 'Belum Bayar' : 'Lunas' } : w);
+        async toggleIuran(id) {
+          const w = this.wargaList.find(x => x.id === id);
+          if (!w) return;
+          const iuranBaru = w.iuran === 'Lunas' ? 'Belum Bayar' : 'Lunas';
+          const { error } = await supabaseClient.from('warga').update({ iuran: iuranBaru }).eq('id', id);
+          if (error) { alert('Gagal memperbarui status iuran: ' + error.message); return; }
+          this.wargaList = this.wargaList.map(w => w.id === id ? { ...w, iuran: iuranBaru } : w);
         },
 
 
