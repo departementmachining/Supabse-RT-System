@@ -65,6 +65,12 @@
         <button @click="activeTab = 'informasi'" :class="activeTab === 'informasi' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-400'" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all">
           <i data-lucide="megaphone" class="w-4 h-4"></i> Pengumuman
         </button>
+        <button @click="activeTab = 'pengurus'" :class="activeTab === 'pengurus' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-400'" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all">
+          <i data-lucide="users-round" class="w-4 h-4"></i> Struktur Organisasi
+        </button>
+        <button @click="activeTab = 'ronda'" :class="activeTab === 'ronda' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-400'" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all">
+          <i data-lucide="shield" class="w-4 h-4"></i> Jadwal Ronda
+        </button>
       </nav>
 
     </aside>
@@ -258,6 +264,45 @@
           </template>
         </div>
 
+        <!-- STRUKTUR ORGANISASI -->
+        <div x-show="activeTab === 'pengurus'" class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            <template x-for="p in pengurusList" :key="p.id">
+              <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+                <div class="w-14 h-14 rounded-full overflow-hidden bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg shrink-0">
+                  <template x-if="p.foto"><img :src="p.foto" class="w-full h-full object-cover"></template>
+                  <template x-if="!p.foto"><span x-text="inisial(p.nama)"></span></template>
+                </div>
+                <div class="min-w-0">
+                  <h4 class="font-bold text-slate-800 text-sm truncate" x-text="p.nama"></h4>
+                  <span class="text-xs text-emerald-600 font-semibold" x-text="p.jabatan"></span>
+                  <p x-show="p.hp" class="text-[11px] text-slate-500 mt-0.5" x-text="p.hp"></p>
+                </div>
+              </div>
+            </template>
+            <p x-show="pengurusList.length === 0" class="sm:col-span-2 xl:col-span-3 text-center text-xs text-slate-400 py-10 bg-white rounded-2xl border border-dashed border-slate-200">Struktur organisasi belum tersedia.</p>
+          </div>
+        </div>
+
+        <!-- JADWAL RONDA -->
+        <div x-show="activeTab === 'ronda'" class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <template x-for="j in jadwalRondaList" :key="j.id">
+              <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                <span class="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md" x-text="j.hari"></span>
+                <h4 class="font-bold text-slate-800 text-sm mt-2" x-text="j.tim || 'Tim Ronda'"></h4>
+                <div class="flex flex-wrap gap-1.5 mt-3">
+                  <template x-for="nama in j.petugas" :key="nama">
+                    <span class="text-[11px] bg-slate-100 text-slate-700 px-2 py-1 rounded-lg" x-text="nama"></span>
+                  </template>
+                </div>
+                <p x-show="j.catatan" class="text-[11px] text-slate-500 mt-2" x-text="j.catatan"></p>
+              </div>
+            </template>
+            <p x-show="jadwalRondaList.length === 0" class="sm:col-span-2 text-center text-xs text-slate-400 py-10 bg-white rounded-2xl border border-dashed border-slate-200">Jadwal ronda belum tersedia.</p>
+          </div>
+        </div>
+
       </div>
     </main>
   </div>
@@ -354,6 +399,8 @@
         koordAktif: null,
         detailKK: null,
         pengumumanList: [],
+        pengurusList: [],
+        jadwalRondaList: [],
 
         // Kolom di Supabase pakai snake_case, di JS (dan tampilan) pakai camelCase — disamakan di sini
         wargaFromRow(row) {
@@ -374,27 +421,34 @@
         },
 
         async muatSemuaData() {
+          const urutHari = ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu'];
           this.loading = true;
           this.loadError = '';
           try {
-            const [warga, kas, inv, info, koord] = await Promise.all([
+            const [warga, kas, inv, info, koord, pengurus, ronda] = await Promise.all([
               supabaseClient.from('warga_publik').select('*'),
               supabaseClient.from('kas').select('*').order('tanggal', { ascending: false }),
               supabaseClient.from('inventaris').select('*'),
               supabaseClient.from('pengumuman').select('*').order('tanggal', { ascending: false }),
-              supabaseClient.from('koordinator_publik').select('*')
+              supabaseClient.from('koordinator_publik').select('*'),
+              supabaseClient.from('pengurus').select('*').order('urutan', { ascending: true }),
+              supabaseClient.from('jadwal_ronda').select('*')
             ]);
             if (warga.error) throw warga.error;
             if (kas.error) throw kas.error;
             if (inv.error) throw inv.error;
             if (info.error) throw info.error;
             if (koord.error) throw koord.error;
+            if (pengurus.error) throw pengurus.error;
+            if (ronda.error) throw ronda.error;
 
             this.wargaList = (warga.data || []).map(this.wargaFromRow);
             this.kasList = kas.data || [];
             this.inventarisList = inv.data || [];
             this.pengumumanList = info.data || [];
             this.koordinatorList = (koord.data || []).map(this.koordinatorFromRow);
+            this.pengurusList = pengurus.data || [];
+            this.jadwalRondaList = (ronda.data || []).sort((a, b) => urutHari.indexOf(a.hari) - urutHari.indexOf(b.hari));
           } catch (err) {
             console.error('Gagal memuat data:', err);
             this.loadError = 'Gagal memuat data. Coba muat ulang halaman.';
