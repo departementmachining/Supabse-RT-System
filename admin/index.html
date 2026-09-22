@@ -14,6 +14,31 @@
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
     [x-cloak] { display: none !important; }
   </style>
+  <script>
+    // ============================================================
+    // DEBUG SEMENTARA — menampilkan error di layar HP.
+    // Hapus blok <div id="debug-error-box"> dan script ini setelah masalah selesai.
+    // ============================================================
+    window.addEventListener('error', function (e) {
+      showDebugError(e.message + '\n\nFile: ' + e.filename + '\nBaris: ' + e.lineno + ':' + e.colno);
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      showDebugError('Promise error: ' + (e.reason && e.reason.message ? e.reason.message : JSON.stringify(e.reason)));
+    });
+    function showDebugError(msg) {
+      var box = document.getElementById('debug-error-box');
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'debug-error-box';
+        box.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#fee2e2;color:#7f1d1d;padding:16px;font-family:monospace;font-size:12px;white-space:pre-wrap;max-height:80vh;overflow:auto;border-bottom:4px solid #dc2626;';
+        document.body.appendChild(box);
+      }
+      var line = document.createElement('div');
+      line.style.cssText = 'margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #fca5a5;';
+      line.textContent = msg;
+      box.appendChild(line);
+    }
+  </script>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased" x-data="adminApp()" x-init="initApp()" x-cloak>
 
