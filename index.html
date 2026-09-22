@@ -8,6 +8,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -15,6 +16,19 @@
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased" x-data="wargaApp()" x-init="initApp()" x-cloak>
+
+  <!-- Indikator memuat data -->
+  <div x-show="loading" class="fixed inset-0 z-50 bg-white/90 flex flex-col items-center justify-center gap-3">
+    <div class="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
+    <p class="text-sm text-slate-500">Memuat data...</p>
+  </div>
+
+  <!-- Pesan gagal memuat data -->
+  <div x-show="!loading && loadError" class="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center gap-3 p-6 text-center">
+    <i data-lucide="alert-triangle" class="w-8 h-8 text-rose-500"></i>
+    <p class="text-sm text-slate-600" x-text="loadError"></p>
+    <button @click="muatSemuaData()" class="px-4 py-2 bg-emerald-700 text-white text-xs font-semibold rounded-xl">Coba Lagi</button>
+  </div>
 
   <div class="min-h-screen flex bg-slate-100">
     
@@ -317,44 +331,78 @@
   </div>
 
   <script>
+    // ============================================================
+    // KONFIGURASI SUPABASE — samakan dengan yang dipakai di admin/index.html
+    // Dashboard Supabase → Settings → API → Project URL & anon public key
+    // ============================================================
+    const SUPABASE_URL = 'https://djgpcfqrgwaalcbetack.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqZ3BjZnFyZ3dhYWxjYmV0YWNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAwMjQyMjcsImV4cCI6MjEwNTYwMDIyN30.75Gnh0KOoAZB8HpWhxuC99iy6-xaSMJCKr-PeH2XUoU';
+
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
     function wargaApp() {
       return {
         logo: localStorage.getItem('rt_logo') || '',
         activeTab: 'dashboard',
         searchWarga: '',
-        wargaList: JSON.parse(localStorage.getItem('rt_warga')) || [
-          { id: 1, nama: 'Budi Santoso', nik: '3171012304850001', kk: '3171012304850099', blok: 'A', noRumah: '12', statusRumah: 'Pribadi', hubungan: 'Kepala Keluarga', hp: '081234567890', iuran: 'Lunas' },
-          { id: 2, nama: 'Siti Aminah', nik: '3171012304850002', kk: '3171012304850099', blok: 'A', noRumah: '12', statusRumah: 'Pribadi', hubungan: 'Istri', hp: '081234567891', iuran: 'Lunas' }
-        ],
-        kasList: JSON.parse(localStorage.getItem('rt_kas')) || [
-          { id: 1, tanggal: '2026-09-01', jenis: 'Masuk', keterangan: 'Iuran Kas Bulanan Warga', jumlah: 1500000 },
-          { id: 2, tanggal: '2026-09-05', jenis: 'Keluar', keterangan: 'Pembelian Lampu Jalan RT', jumlah: 350000 }
-        ],
-        inventarisList: JSON.parse(localStorage.getItem('rt_inv')) || [
-          { id: 1, nama: 'Tenda RT 4x6 Meter', jumlah: 2, kondisi: 'Baik' },
-          { id: 2, nama: 'Kursi Plastik', jumlah: 50, kondisi: 'Baik' }
-        ],
-        koordinatorList: JSON.parse(localStorage.getItem('rt_koordinator')) || [
-          { id: 1, nama: 'Budi Santoso', blok: ['A'], wargaKK: ['3171012304850099'], modelBaru: true }
-        ],
+        loading: true,
+        loadError: '',
+        wargaList: [],
+        kasList: [],
+        inventarisList: [],
+        koordinatorList: [],
         koordAktif: null,
         detailKK: null,
-        pengumumanList: JSON.parse(localStorage.getItem('rt_pengumuman')) || [
-          { id: 1, tanggal: '2026-09-20', judul: 'Kerja Bakti Lomba Kebersihan', isi: 'Diharapkan seluruh warga hadir pada hari Minggu jam 07.00 WIB untuk kerja bakti bersama.' }
-        ],
-        initApp() {
+        pengumumanList: [],
+
+        // Kolom di Supabase pakai snake_case, di JS (dan tampilan) pakai camelCase — disamakan di sini
+        wargaFromRow(row) {
+          return {
+            id: row.id, nama: row.nama, kk: row._kk_internal, blok: row.blok || '',
+            noRumah: row.no_rumah || '', statusRumah: row.status_rumah || 'Pribadi', hubungan: row.hubungan
+            // sengaja TIDAK menyertakan nik/kk asli — view warga_publik memang tidak mengirim nik sama sekali
+          };
+        },
+        koordinatorFromRow(row) {
+          return { id: row.id, nama: row.nama, blok: row.blok || [], wargaKK: row.warga_kk || [], modelBaru: true };
+        },
+
+        async initApp() {
           this.$watch('activeTab', () => this.$nextTick(() => lucide.createIcons()));
+          await this.muatSemuaData();
           this.$nextTick(() => { lucide.createIcons(); this.renderChart(); });
-          window.addEventListener('storage', () => {
-            this.wargaList = JSON.parse(localStorage.getItem('rt_warga')) || [];
-            this.kasList = JSON.parse(localStorage.getItem('rt_kas')) || [];
-            this.inventarisList = JSON.parse(localStorage.getItem('rt_inv')) || [];
-            this.pengumumanList = JSON.parse(localStorage.getItem('rt_pengumuman')) || [];
-            this.koordinatorList = JSON.parse(localStorage.getItem('rt_koordinator')) || [];
-            this.logo = localStorage.getItem('rt_logo') || '';
+        },
+
+        async muatSemuaData() {
+          this.loading = true;
+          this.loadError = '';
+          try {
+            const [warga, kas, inv, info, koord] = await Promise.all([
+              supabaseClient.from('warga_publik').select('*'),
+              supabaseClient.from('kas').select('*').order('tanggal', { ascending: false }),
+              supabaseClient.from('inventaris').select('*'),
+              supabaseClient.from('pengumuman').select('*').order('tanggal', { ascending: false }),
+              supabaseClient.from('koordinator_publik').select('*')
+            ]);
+            if (warga.error) throw warga.error;
+            if (kas.error) throw kas.error;
+            if (inv.error) throw inv.error;
+            if (info.error) throw info.error;
+            if (koord.error) throw koord.error;
+
+            this.wargaList = (warga.data || []).map(this.wargaFromRow);
+            this.kasList = kas.data || [];
+            this.inventarisList = inv.data || [];
+            this.pengumumanList = info.data || [];
+            this.koordinatorList = (koord.data || []).map(this.koordinatorFromRow);
+          } catch (err) {
+            console.error('Gagal memuat data:', err);
+            this.loadError = 'Gagal memuat data. Coba muat ulang halaman.';
+          } finally {
+            this.loading = false;
             this.renderChart();
             this.$nextTick(() => lucide.createIcons());
-          });
+          }
         },
         // Yang ditampilkan hanya kepala keluarga; pencarian tetap mencakup seluruh anggota KK
         get filteredKepala() {
