@@ -289,13 +289,21 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <template x-for="j in jadwalRondaList" :key="j.id">
               <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                <span class="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md" x-text="j.hari"></span>
-                <h4 class="font-bold text-slate-800 text-sm mt-2" x-text="j.tim || 'Tim Ronda'"></h4>
-                <div class="flex flex-wrap gap-1.5 mt-3">
-                  <template x-for="nama in j.petugas" :key="nama">
-                    <span class="text-[11px] bg-slate-100 text-slate-700 px-2 py-1 rounded-lg" x-text="nama"></span>
-                  </template>
+                <div class="flex items-start justify-between gap-2">
+                  <div>
+                    <span class="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md" x-text="j.hari"></span>
+                    <h4 class="font-bold text-slate-800 text-sm mt-2" x-text="j.tim || 'Tim Ronda'"></h4>
+                  </div>
+                  <span class="text-[10px] text-slate-400 shrink-0" x-text="'Periode ' + (j.periodeBulan || 1) + ' bulan'"></span>
                 </div>
+                <ol class="mt-3 space-y-1.5 list-decimal list-inside">
+                  <template x-for="w in petugasRondaWarga(j)" :key="w.kk">
+                    <li class="text-[11px] text-slate-700 bg-slate-50 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
+                      <span class="font-medium truncate" x-text="w.nama"></span>
+                      <span class="text-slate-400 shrink-0" x-text="'Blok ' + (w.blok || '-') + ' / No. ' + (w.noRumah || '-')"></span>
+                    </li>
+                  </template>
+                </ol>
                 <p x-show="j.catatan" class="text-[11px] text-slate-500 mt-2" x-text="j.catatan"></p>
               </div>
             </template>
@@ -413,6 +421,17 @@
         koordinatorFromRow(row) {
           return { id: row.id, nama: row.nama, blok: row.blok || [], wargaKK: row.warga_kk || [], modelBaru: true };
         },
+        jadwalRondaFromRow(row) {
+          return {
+            id: row.id, hari: row.hari, tim: row.tim || '',
+            petugasKK: row.petugas_kk || [], periodeBulan: row.periode_bulan || 1,
+            catatan: row.catatan || ''
+          };
+        },
+        // Nama, no rumah, dan blok petugas ronda diambil real-time dari data warga (kepala keluarga)
+        petugasRondaWarga(j) {
+          return (j.petugasKK || []).map(kk => this.wargaList.find(w => w.kk === kk && w.hubungan === 'Kepala Keluarga')).filter(Boolean);
+        },
 
         async initApp() {
           this.$watch('activeTab', () => this.$nextTick(() => lucide.createIcons()));
@@ -448,7 +467,7 @@
             this.pengumumanList = info.data || [];
             this.koordinatorList = (koord.data || []).map(this.koordinatorFromRow);
             this.pengurusList = pengurus.data || [];
-            this.jadwalRondaList = (ronda.data || []).sort((a, b) => urutHari.indexOf(a.hari) - urutHari.indexOf(b.hari));
+            this.jadwalRondaList = (ronda.data || []).map(this.jadwalRondaFromRow).sort((a, b) => urutHari.indexOf(a.hari) - urutHari.indexOf(b.hari));
           } catch (err) {
             console.error('Gagal memuat data:', err);
             this.loadError = 'Gagal memuat data. Coba muat ulang halaman.';
