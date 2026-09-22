@@ -14,31 +14,6 @@
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
     [x-cloak] { display: none !important; }
   </style>
-  <script>
-    // ============================================================
-    // DEBUG SEMENTARA — menampilkan error di layar HP.
-    // Hapus blok <div id="debug-error-box"> dan script ini setelah masalah selesai.
-    // ============================================================
-    window.addEventListener('error', function (e) {
-      showDebugError(e.message + '\n\nFile: ' + e.filename + '\nBaris: ' + e.lineno + ':' + e.colno);
-    });
-    window.addEventListener('unhandledrejection', function (e) {
-      showDebugError('Promise error: ' + (e.reason && e.reason.message ? e.reason.message : JSON.stringify(e.reason)));
-    });
-    function showDebugError(msg) {
-      var box = document.getElementById('debug-error-box');
-      if (!box) {
-        box = document.createElement('div');
-        box.id = 'debug-error-box';
-        box.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#fee2e2;color:#7f1d1d;padding:16px;font-family:monospace;font-size:12px;white-space:pre-wrap;max-height:80vh;overflow:auto;border-bottom:4px solid #dc2626;';
-        document.body.appendChild(box);
-      }
-      var line = document.createElement('div');
-      line.style.cssText = 'margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #fca5a5;';
-      line.textContent = msg;
-      box.appendChild(line);
-    }
-  </script>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased" x-data="adminApp()" x-init="initApp()" x-cloak>
 
@@ -801,7 +776,7 @@
     const SUPABASE_URL = 'https://djgpcfqrgwaalcbetack.supabase.co'; // <-- ganti
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqZ3BjZnFyZ3dhYWxjYmV0YWNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAwMjQyMjcsImV4cCI6MjEwNTYwMDIyN30.75Gnh0KOoAZB8HpWhxuC99iy6-xaSMJCKr-PeH2XUoU'; // <-- ganti
 
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     function adminApp() {
       const emptyWarga = () => ({
@@ -859,12 +834,12 @@
 
         async initApp() {
           // Cek apakah sudah ada sesi login Supabase aktif (misal setelah refresh halaman)
-          const { data: { session } } = await supabase.auth.getSession();
+          const { data: { session } } = await supabaseClient.auth.getSession();
           this.isLoggedIn = !!session;
           if (this.isLoggedIn) this.$nextTick(() => { lucide.createIcons(); this.renderChart(); });
 
           // Pantau perubahan status login (login/logout/token expired) secara real-time
-          supabase.auth.onAuthStateChange((event, session) => {
+          supabaseClient.auth.onAuthStateChange((event, session) => {
             this.isLoggedIn = !!session;
           });
 
@@ -973,7 +948,7 @@
         async loginAdmin() {
           this.loginError = '';
           this.loginLoading = true;
-          const { data, error } = await supabase.auth.signInWithPassword({
+          const { data, error } = await supabaseClient.auth.signInWithPassword({
             email: this.loginForm.email.trim(),
             password: this.loginForm.password
           });
@@ -987,7 +962,7 @@
           this.$nextTick(() => { lucide.createIcons(); this.renderChart(); });
         },
         async logout() {
-          await supabase.auth.signOut();
+          await supabaseClient.auth.signOut();
           this.isLoggedIn = false;
           this.loginForm = { email: '', password: '' };
         },
