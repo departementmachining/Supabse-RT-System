@@ -814,20 +814,10 @@
         newInfo: { judul: '', isi: '' },
 
         wargaList: [],
-        kasList: JSON.parse(localStorage.getItem('rt_kas')) || [
-          { id: 1, tanggal: '2026-09-01', jenis: 'Masuk', keterangan: 'Iuran Kas Bulanan Warga', jumlah: 1500000 },
-          { id: 2, tanggal: '2026-09-05', jenis: 'Keluar', keterangan: 'Pembelian Lampu Jalan RT', jumlah: 350000 }
-        ],
-        inventarisList: JSON.parse(localStorage.getItem('rt_inv')) || [
-          { id: 1, nama: 'Tenda RT 4x6 Meter', jumlah: 2, kondisi: 'Baik' },
-          { id: 2, nama: 'Kursi Plastik', jumlah: 50, kondisi: 'Baik' }
-        ],
-        koordinatorList: JSON.parse(localStorage.getItem('rt_koordinator')) || [
-          { id: 1, nama: 'Budi Santoso', blok: ['A'], wargaKK: ['3171012304850099'], modelBaru: true }
-        ],
-        pengumumanList: JSON.parse(localStorage.getItem('rt_pengumuman')) || [
-          { id: 1, tanggal: '2026-09-20', judul: 'Kerja Bakti Lomba Kebersihan', isi: 'Diharapkan seluruh warga hadir pada hari Minggu jam 07.00 WIB untuk kerja bakti bersama.' }
-        ],
+        kasList: [],
+        inventarisList: [],
+        koordinatorList: [],
+        pengumumanList: [],
 
         async initApp() {
           // Cek apakah sudah ada sesi login Supabase aktif (misal setelah refresh halaman)
@@ -840,13 +830,7 @@
             this.isLoggedIn = !!session;
           });
 
-          if (this.migrasiKoordinator()) localStorage.setItem('rt_koordinator', JSON.stringify(this.koordinatorList));
-          // Simpan otomatis ke localStorage agar terbaca oleh portal warga
-          // wargaList sekarang disinkronkan langsung ke Supabase lewat addWarga/updateWarga/dst (bukan localStorage lagi)
-          this.$watch('kasList', val => { localStorage.setItem('rt_kas', JSON.stringify(val)); this.renderChart(); });
-          this.$watch('inventarisList', val => localStorage.setItem('rt_inv', JSON.stringify(val)));
-          this.$watch('pengumumanList', val => localStorage.setItem('rt_pengumuman', JSON.stringify(val)));
-          this.$watch('koordinatorList', val => localStorage.setItem('rt_koordinator', JSON.stringify(val)));
+          // kas, inventaris, pengumuman, koordinator sekarang disinkronkan langsung ke Supabase (bukan localStorage lagi)
           this.$watch('bgOverlay', val => localStorage.setItem('rt_bg_overlay', String(val)));
           this.$watch('koordinatorList', () => this.$nextTick(() => lucide.createIcons()));
           // Ikon Lucide dirender ulang setiap ada perubahan tampilan
@@ -965,10 +949,49 @@
           if (error) { console.error('Gagal memuat data warga:', error); alert('Gagal memuat data warga: ' + error.message); return; }
           this.wargaList = (data || []).map(this.wargaFromRow);
         },
+
+        /* ---------- Sinkronisasi tabel `kas` ---------- */
+        async loadKas() {
+          const { data, error } = await supabaseClient.from('kas').select('*').order('tanggal', { ascending: false }).order('created_at', { ascending: false });
+          if (error) { console.error('Gagal memuat data kas:', error); alert('Gagal memuat data kas: ' + error.message); return; }
+          this.kasList = data || [];
+        },
+
+        /* ---------- Sinkronisasi tabel `inventaris` ---------- */
+        async loadInventaris() {
+          const { data, error } = await supabaseClient.from('inventaris').select('*').order('created_at', { ascending: true });
+          if (error) { console.error('Gagal memuat data inventaris:', error); alert('Gagal memuat data inventaris: ' + error.message); return; }
+          this.inventarisList = data || [];
+        },
+
+        /* ---------- Sinkronisasi tabel `pengumuman` ---------- */
+        async loadPengumuman() {
+          const { data, error } = await supabaseClient.from('pengumuman').select('*').order('tanggal', { ascending: false }).order('created_at', { ascending: false });
+          if (error) { console.error('Gagal memuat pengumuman:', error); alert('Gagal memuat pengumuman: ' + error.message); return; }
+          this.pengumumanList = data || [];
+        },
+
+        /* ---------- Sinkronisasi tabel `koordinator` (kolom blok & warga_kk berupa array) ---------- */
+        koordinatorFromRow(row) {
+          return { id: row.id, nama: row.nama, blok: row.blok || [], wargaKK: row.warga_kk || [], modelBaru: true };
+        },
+        koordinatorToRow(k) {
+          return { nama: k.nama, blok: k.blok || [], warga_kk: k.wargaKK || [] };
+        },
+        async loadKoordinator() {
+          const { data, error } = await supabaseClient.from('koordinator').select('*').order('created_at', { ascending: true });
+          if (error) { console.error('Gagal memuat data koordinator:', error); alert('Gagal memuat data koordinator: ' + error.message); return; }
+          this.koordinatorList = (data || []).map(this.koordinatorFromRow);
+        },
+
         async loadSemuaData() {
-          // Untuk saat ini hanya data warga yang disinkronkan dengan Supabase (data paling sensitif).
-          // kas, inventaris, pengumuman, koordinator masih memakai localStorage seperti semula.
-          await this.loadWarga();
+          await Promise.all([
+            this.loadWarga(),
+            this.loadKas(),
+            this.loadInventaris(),
+            this.loadPengumuman(),
+            this.loadKoordinator()
+          ]);
           this.$nextTick(() => { lucide.createIcons(); this.renderChart(); });
         },
 
@@ -994,7 +1017,7 @@
           await supabaseClient.auth.signOut();
           this.isLoggedIn = false;
           this.loginForm = { email: '', password: '' };
-          this.wargaList = []; // bersihkan data sensitif dari memory setelah logout
+          this.wargaList = []; this.kasList = []; this.inventarisList = []; this.pengumumanList = []; this.koordinatorList = [];
         },
 
         /* ---------- Helper ---------- */
@@ -1225,9 +1248,13 @@
             .filter(k => k.id !== this.formKoord.id && k.blok.some(b => this.formKoord.blok.includes(b)))
             .map(k => k.nama);
         },
-        lepasKeluarga(koordId, kk) {
-          this.koordinatorList = this.koordinatorList.map(k =>
-            k.id === koordId ? { ...k, wargaKK: (k.wargaKK || []).filter(x => x !== kk) } : k);
+        async lepasKeluarga(koordId, kk) {
+          const k = this.koordinatorList.find(x => x.id === koordId);
+          if (!k) return;
+          const wargaKKBaru = (k.wargaKK || []).filter(x => x !== kk);
+          const { error } = await supabaseClient.from('koordinator').update({ warga_kk: wargaKKBaru }).eq('id', koordId);
+          if (error) { alert('Gagal memperbarui: ' + error.message); return; }
+          this.koordinatorList = this.koordinatorList.map(x => x.id === koordId ? { ...x, wargaKK: wargaKKBaru } : x);
         },
         openModalKoord(k = null) {
           this.cariWargaKoord = '';
@@ -1237,31 +1264,46 @@
           this.showModalKoord = true;
           this.$nextTick(() => lucide.createIcons());
         },
-        saveKoord() {
+        async saveKoord() {
           const pilih = [...this.formKoord.blok].sort();
           // Simpan hanya keluarga yang masih ada
           const adaKK = new Set(this.wargaList.map(w => w.kk));
           const wargaKK = [...new Set(this.formKoord.wargaKK)].filter(kk => adaKK.has(kk));
-          const data = { id: this.formKoord.id || this.newId(), nama: this.formKoord.nama.trim(), blok: pilih, wargaKK, modelBaru: true };
+          const nama = this.formKoord.nama.trim();
           if (this.formKoord.id) {
-            this.koordinatorList = this.koordinatorList.map(k => k.id === this.formKoord.id ? data : k);
+            const { error } = await supabaseClient.from('koordinator')
+              .update({ nama, blok: pilih, warga_kk: wargaKK }).eq('id', this.formKoord.id);
+            if (error) { alert('Gagal menyimpan: ' + error.message); return; }
           } else {
-            this.koordinatorList = [...this.koordinatorList, data];
+            const { error } = await supabaseClient.from('koordinator')
+              .insert({ nama, blok: pilih, warga_kk: wargaKK });
+            if (error) { alert('Gagal menyimpan: ' + error.message); return; }
           }
+          await this.loadKoordinator();
           this.showModalKoord = false;
         },
-        deleteKoord(id) {
-          if (confirm('Hapus koordinator ini? Warga tidak ikut terhapus.')) this.koordinatorList = this.koordinatorList.filter(k => k.id !== id);
+        async deleteKoord(id) {
+          if (!confirm('Hapus koordinator ini? Warga tidak ikut terhapus.')) return;
+          const { error } = await supabaseClient.from('koordinator').delete().eq('id', id);
+          if (error) { alert('Gagal menghapus: ' + error.message); return; }
+          this.koordinatorList = this.koordinatorList.filter(k => k.id !== id);
         },
 
         /* ---------- Kas ---------- */
-        addKas() {
-          this.kasList = [{ id: this.newId(), tanggal: new Date().toISOString().split('T')[0], ...this.newKas }, ...this.kasList];
+        async addKas() {
+          const row = { tanggal: new Date().toISOString().split('T')[0], jenis: this.newKas.jenis, keterangan: this.newKas.keterangan, jumlah: Number(this.newKas.jumlah) };
+          const { error } = await supabaseClient.from('kas').insert(row);
+          if (error) { alert('Gagal menyimpan transaksi: ' + error.message); return; }
+          await this.loadKas();
           this.newKas = { jenis: 'Masuk', keterangan: '', jumlah: '' };
           this.showModalKas = false;
         },
-        deleteKas(id) {
-          if (confirm('Hapus transaksi ini?')) this.kasList = this.kasList.filter(k => k.id !== id);
+        async deleteKas(id) {
+          if (!confirm('Hapus transaksi ini?')) return;
+          const { error } = await supabaseClient.from('kas').delete().eq('id', id);
+          if (error) { alert('Gagal menghapus: ' + error.message); return; }
+          this.kasList = this.kasList.filter(k => k.id !== id);
+          this.renderChart();
         },
 
         /* ---------- Inventaris ---------- */
@@ -1269,26 +1311,39 @@
           this.formInv = inv ? { ...inv } : { id: null, nama: '', jumlah: 1, kondisi: 'Baik' };
           this.showModalInv = true;
         },
-        saveInv() {
+        async saveInv() {
+          const row = { nama: this.formInv.nama, jumlah: Number(this.formInv.jumlah), kondisi: this.formInv.kondisi };
           if (this.formInv.id) {
-            this.inventarisList = this.inventarisList.map(i => i.id === this.formInv.id ? { ...this.formInv } : i);
+            const { error } = await supabaseClient.from('inventaris').update(row).eq('id', this.formInv.id);
+            if (error) { alert('Gagal menyimpan: ' + error.message); return; }
           } else {
-            this.inventarisList = [...this.inventarisList, { ...this.formInv, id: this.newId() }];
+            const { error } = await supabaseClient.from('inventaris').insert(row);
+            if (error) { alert('Gagal menyimpan: ' + error.message); return; }
           }
+          await this.loadInventaris();
           this.showModalInv = false;
         },
-        deleteInv(id) {
-          if (confirm('Hapus inventaris ini?')) this.inventarisList = this.inventarisList.filter(i => i.id !== id);
+        async deleteInv(id) {
+          if (!confirm('Hapus inventaris ini?')) return;
+          const { error } = await supabaseClient.from('inventaris').delete().eq('id', id);
+          if (error) { alert('Gagal menghapus: ' + error.message); return; }
+          this.inventarisList = this.inventarisList.filter(i => i.id !== id);
         },
 
         /* ---------- Pengumuman ---------- */
-        addInfo() {
-          this.pengumumanList = [{ id: this.newId(), tanggal: new Date().toISOString().split('T')[0], ...this.newInfo }, ...this.pengumumanList];
+        async addInfo() {
+          const row = { tanggal: new Date().toISOString().split('T')[0], judul: this.newInfo.judul, isi: this.newInfo.isi };
+          const { error } = await supabaseClient.from('pengumuman').insert(row);
+          if (error) { alert('Gagal menyimpan pengumuman: ' + error.message); return; }
+          await this.loadPengumuman();
           this.newInfo = { judul: '', isi: '' };
           this.showModalInfo = false;
         },
-        deleteInfo(id) {
-          if (confirm('Hapus pengumuman ini?')) this.pengumumanList = this.pengumumanList.filter(p => p.id !== id);
+        async deleteInfo(id) {
+          if (!confirm('Hapus pengumuman ini?')) return;
+          const { error } = await supabaseClient.from('pengumuman').delete().eq('id', id);
+          if (error) { alert('Gagal menghapus: ' + error.message); return; }
+          this.pengumumanList = this.pengumumanList.filter(p => p.id !== id);
         }
       }
     }
