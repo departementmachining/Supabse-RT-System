@@ -144,6 +144,12 @@
         <button @click="activeTab = 'informasi'" :class="activeTab === 'informasi' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-400'" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all">
           <i data-lucide="megaphone" class="w-4 h-4"></i> Kelola Pengumuman
         </button>
+        <button @click="activeTab = 'pengurus'" :class="activeTab === 'pengurus' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-400'" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all">
+          <i data-lucide="users-round" class="w-4 h-4"></i> Struktur Organisasi
+        </button>
+        <button @click="activeTab = 'ronda'" :class="activeTab === 'ronda' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-400'" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all">
+          <i data-lucide="shield" class="w-4 h-4"></i> Jadwal Ronda
+        </button>
       </nav>
 
       <div class="p-4 border-t border-slate-800">
@@ -441,6 +447,69 @@
               <button @click="deleteInfo(p.id)" class="text-rose-600 hover:text-rose-800 p-1 self-start"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
             </div>
           </template>
+        </div>
+
+        <!-- ==================== TAB STRUKTUR ORGANISASI ==================== -->
+        <div x-show="activeTab === 'pengurus'" class="space-y-4">
+          <div class="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200">
+            <span class="text-sm font-bold text-slate-800">Struktur Organisasi</span>
+            <button @click="openModalPengurus()" class="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-xl flex items-center gap-2">
+              <i data-lucide="plus" class="w-4 h-4"></i> Tambah Pengurus
+            </button>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            <template x-for="p in pengurusList" :key="p.id">
+              <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+                <div class="w-14 h-14 rounded-full overflow-hidden bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg shrink-0">
+                  <template x-if="p.foto"><img :src="p.foto" class="w-full h-full object-cover"></template>
+                  <template x-if="!p.foto"><span x-text="inisial(p.nama)"></span></template>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <h4 class="font-bold text-slate-800 text-sm truncate" x-text="p.nama"></h4>
+                  <span class="text-xs text-emerald-600 font-semibold" x-text="p.jabatan"></span>
+                  <p x-show="p.hp" class="text-[11px] text-slate-500 mt-0.5" x-text="p.hp"></p>
+                </div>
+                <div class="flex flex-col gap-1 shrink-0">
+                  <button @click="openModalPengurus(p)" class="p-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                  <button @click="deletePengurus(p.id)" class="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                </div>
+              </div>
+            </template>
+            <p x-show="pengurusList.length === 0" class="sm:col-span-2 xl:col-span-3 text-center text-xs text-slate-400 py-10 bg-white rounded-2xl border border-dashed border-slate-200">Belum ada pengurus yang ditambahkan.</p>
+          </div>
+        </div>
+
+        <!-- ==================== TAB JADWAL RONDA ==================== -->
+        <div x-show="activeTab === 'ronda'" class="space-y-4">
+          <div class="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200">
+            <span class="text-sm font-bold text-slate-800">Jadwal Ronda</span>
+            <button @click="openModalRonda()" class="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-xl flex items-center gap-2">
+              <i data-lucide="plus" class="w-4 h-4"></i> Tambah Jadwal
+            </button>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <template x-for="j in jadwalRondaList" :key="j.id">
+              <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                <div class="flex justify-between items-start gap-2">
+                  <div>
+                    <span class="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md" x-text="j.hari"></span>
+                    <h4 class="font-bold text-slate-800 text-sm mt-2" x-text="j.tim || 'Tim Ronda'"></h4>
+                  </div>
+                  <div class="flex gap-1 shrink-0">
+                    <button @click="openModalRonda(j)" class="p-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                    <button @click="deleteRonda(j.id)" class="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                  </div>
+                </div>
+                <div class="flex flex-wrap gap-1.5 mt-3">
+                  <template x-for="nama in j.petugas" :key="nama">
+                    <span class="text-[11px] bg-slate-100 text-slate-700 px-2 py-1 rounded-lg" x-text="nama"></span>
+                  </template>
+                </div>
+                <p x-show="j.catatan" class="text-[11px] text-slate-500 mt-2" x-text="j.catatan"></p>
+              </div>
+            </template>
+            <p x-show="jadwalRondaList.length === 0" class="sm:col-span-2 text-center text-xs text-slate-400 py-10 bg-white rounded-2xl border border-dashed border-slate-200">Belum ada jadwal ronda.</p>
+          </div>
         </div>
 
       </div>
@@ -768,6 +837,54 @@
     </div>
   </div>
 
+  <!-- ==================== MODAL PENGURUS (Struktur Organisasi) ==================== -->
+  <div x-show="showModalPengurus" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+      <h3 class="font-bold text-slate-800 text-base" x-text="formPengurus.id ? 'Edit Pengurus' : 'Tambah Pengurus'"></h3>
+      <p x-show="errorPengurus" class="p-2.5 bg-rose-50 border border-rose-200 text-rose-600 rounded-xl text-xs" x-text="errorPengurus"></p>
+      <form @submit.prevent="savePengurus()" class="space-y-3">
+        <div class="flex items-center gap-3">
+          <label class="relative w-16 h-16 shrink-0 rounded-full overflow-hidden bg-emerald-100 text-emerald-700 flex items-center justify-center cursor-pointer font-bold" title="Klik untuk unggah foto">
+            <template x-if="formPengurus.foto"><img :src="formPengurus.foto" class="w-full h-full object-cover"></template>
+            <template x-if="!formPengurus.foto"><i data-lucide="camera" class="w-5 h-5"></i></template>
+            <input type="file" accept="image/*" class="hidden" @change="uploadFotoPengurus($event)">
+          </label>
+          <p class="text-[11px] text-slate-500">Foto opsional. Ketuk lingkaran untuk unggah.</p>
+        </div>
+        <input type="text" x-model="formPengurus.nama" placeholder="Nama lengkap" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+        <input type="text" x-model="formPengurus.jabatan" placeholder="Jabatan (misal: Ketua RT)" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+        <input type="text" x-model="formPengurus.hp" placeholder="No. HP / WA (opsional)" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" @click="showModalPengurus = false" class="px-4 py-2 bg-slate-100 text-xs rounded-xl">Batal</button>
+          <button type="submit" class="px-4 py-2 bg-emerald-700 text-white text-xs rounded-xl font-semibold">Simpan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL JADWAL RONDA ==================== -->
+  <div x-show="showModalRonda" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+      <h3 class="font-bold text-slate-800 text-base" x-text="formRonda.id ? 'Edit Jadwal Ronda' : 'Tambah Jadwal Ronda'"></h3>
+      <p x-show="errorRonda" class="p-2.5 bg-rose-50 border border-rose-200 text-rose-600 rounded-xl text-xs" x-text="errorRonda"></p>
+      <form @submit.prevent="saveRonda()" class="space-y-3">
+        <select x-model="formRonda.hari" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+          <option value="" disabled>Pilih hari</option>
+          <template x-for="h in ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu']" :key="h">
+            <option :value="h" x-text="h"></option>
+          </template>
+        </select>
+        <input type="text" x-model="formRonda.tim" placeholder="Nama tim/blok (misal: Blok A)" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+        <textarea x-model="formRonda.petugasText" rows="3" placeholder="Nama petugas, pisahkan dengan koma. Contoh: Budi, Andi, Dedi" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"></textarea>
+        <input type="text" x-model="formRonda.catatan" placeholder="Catatan (opsional)" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" @click="showModalRonda = false" class="px-4 py-2 bg-slate-100 text-xs rounded-xl">Batal</button>
+          <button type="submit" class="px-4 py-2 bg-emerald-700 text-white text-xs rounded-xl font-semibold">Simpan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
     // ============================================================
     // KONFIGURASI SUPABASE — GANTI DENGAN NILAI PROJECT KAMU SENDIRI
@@ -804,6 +921,8 @@
         showModalInv: false,
         showModalInfo: false,
         showModalKoord: false,
+        showModalPengurus: false,
+        showModalRonda: false,
         detailKK: null,
         formKoord: { id: null, nama: '', blok: [], wargaKK: [] },
         cariWargaKoord: '',
@@ -812,10 +931,16 @@
         newKas: { jenis: 'Masuk', keterangan: '', jumlah: '' },
         formInv: { id: null, nama: '', jumlah: 1, kondisi: 'Baik' },
         newInfo: { judul: '', isi: '' },
+        formPengurus: { id: null, nama: '', jabatan: '', hp: '', foto: '' },
+        errorPengurus: '',
+        formRonda: { id: null, hari: '', tim: '', petugasText: '', catatan: '' },
+        errorRonda: '',
 
         wargaList: [],
         kasList: [],
         inventarisList: [],
+        pengurusList: [],
+        jadwalRondaList: [],
         koordinatorList: [],
         pengumumanList: [],
 
@@ -984,13 +1109,30 @@
           this.koordinatorList = (data || []).map(this.koordinatorFromRow);
         },
 
+        /* ---------- Sinkronisasi tabel `pengurus` (Struktur Organisasi) ---------- */
+        async loadPengurus() {
+          const { data, error } = await supabaseClient.from('pengurus').select('*').order('urutan', { ascending: true }).order('created_at', { ascending: true });
+          if (error) { console.error('Gagal memuat data pengurus:', error); alert('Gagal memuat data pengurus: ' + error.message); return; }
+          this.pengurusList = data || [];
+        },
+
+        /* ---------- Sinkronisasi tabel `jadwal_ronda` ---------- */
+        async loadJadwalRonda() {
+          const urutHari = ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu'];
+          const { data, error } = await supabaseClient.from('jadwal_ronda').select('*');
+          if (error) { console.error('Gagal memuat jadwal ronda:', error); alert('Gagal memuat jadwal ronda: ' + error.message); return; }
+          this.jadwalRondaList = (data || []).sort((a, b) => urutHari.indexOf(a.hari) - urutHari.indexOf(b.hari));
+        },
+
         async loadSemuaData() {
           await Promise.all([
             this.loadWarga(),
             this.loadKas(),
             this.loadInventaris(),
             this.loadPengumuman(),
-            this.loadKoordinator()
+            this.loadKoordinator(),
+            this.loadPengurus(),
+            this.loadJadwalRonda()
           ]);
           this.$nextTick(() => { lucide.createIcons(); this.renderChart(); });
         },
@@ -1017,7 +1159,7 @@
           await supabaseClient.auth.signOut();
           this.isLoggedIn = false;
           this.loginForm = { email: '', password: '' };
-          this.wargaList = []; this.kasList = []; this.inventarisList = []; this.pengumumanList = []; this.koordinatorList = [];
+          this.wargaList = []; this.kasList = []; this.inventarisList = []; this.pengumumanList = []; this.koordinatorList = []; this.pengurusList = []; this.jadwalRondaList = [];
         },
 
         /* ---------- Helper ---------- */
@@ -1344,6 +1486,87 @@
           const { error } = await supabaseClient.from('pengumuman').delete().eq('id', id);
           if (error) { alert('Gagal menghapus: ' + error.message); return; }
           this.pengumumanList = this.pengumumanList.filter(p => p.id !== id);
+        },
+
+        /* ---------- Struktur Organisasi (Pengurus) ---------- */
+        openModalPengurus(p = null) {
+          this.errorPengurus = '';
+          this.formPengurus = p
+            ? { id: p.id, nama: p.nama, jabatan: p.jabatan, hp: p.hp || '', foto: p.foto || '' }
+            : { id: null, nama: '', jabatan: '', hp: '', foto: '' };
+          this.showModalPengurus = true;
+          this.$nextTick(() => lucide.createIcons());
+        },
+        uploadFotoPengurus(e) {
+          const file = e.target.files[0];
+          if (!file) return;
+          if (!file.type.startsWith('image/')) { this.errorPengurus = 'File harus berupa gambar.'; e.target.value = ''; return; }
+          const reader = new FileReader();
+          reader.onload = ev => {
+            const img = new Image();
+            img.onload = () => {
+              // Kecilkan ke maks 256px agar hemat ukuran data
+              const max = 256;
+              const scale = Math.min(1, max / Math.max(img.width, img.height));
+              const c = document.createElement('canvas');
+              c.width = Math.round(img.width * scale);
+              c.height = Math.round(img.height * scale);
+              c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+              this.formPengurus.foto = c.toDataURL('image/jpeg', 0.85);
+              e.target.value = '';
+            };
+            img.src = ev.target.result;
+          };
+          reader.readAsDataURL(file);
+        },
+        async savePengurus() {
+          this.errorPengurus = '';
+          const row = { nama: this.formPengurus.nama.trim(), jabatan: this.formPengurus.jabatan.trim(), hp: this.formPengurus.hp || null, foto: this.formPengurus.foto || null };
+          if (this.formPengurus.id) {
+            const { error } = await supabaseClient.from('pengurus').update(row).eq('id', this.formPengurus.id);
+            if (error) { this.errorPengurus = 'Gagal menyimpan: ' + error.message; return; }
+          } else {
+            const { error } = await supabaseClient.from('pengurus').insert({ ...row, urutan: this.pengurusList.length });
+            if (error) { this.errorPengurus = 'Gagal menyimpan: ' + error.message; return; }
+          }
+          await this.loadPengurus();
+          this.showModalPengurus = false;
+        },
+        async deletePengurus(id) {
+          if (!confirm('Hapus pengurus ini?')) return;
+          const { error } = await supabaseClient.from('pengurus').delete().eq('id', id);
+          if (error) { alert('Gagal menghapus: ' + error.message); return; }
+          this.pengurusList = this.pengurusList.filter(p => p.id !== id);
+        },
+
+        /* ---------- Jadwal Ronda ---------- */
+        openModalRonda(j = null) {
+          this.errorRonda = '';
+          this.formRonda = j
+            ? { id: j.id, hari: j.hari, tim: j.tim || '', petugasText: (j.petugas || []).join(', '), catatan: j.catatan || '' }
+            : { id: null, hari: '', tim: '', petugasText: '', catatan: '' };
+          this.showModalRonda = true;
+          this.$nextTick(() => lucide.createIcons());
+        },
+        async saveRonda() {
+          this.errorRonda = '';
+          const petugas = this.formRonda.petugasText.split(',').map(s => s.trim()).filter(Boolean);
+          const row = { hari: this.formRonda.hari, tim: this.formRonda.tim.trim() || null, petugas, catatan: this.formRonda.catatan.trim() || null };
+          if (this.formRonda.id) {
+            const { error } = await supabaseClient.from('jadwal_ronda').update(row).eq('id', this.formRonda.id);
+            if (error) { this.errorRonda = 'Gagal menyimpan: ' + error.message; return; }
+          } else {
+            const { error } = await supabaseClient.from('jadwal_ronda').insert(row);
+            if (error) { this.errorRonda = 'Gagal menyimpan: ' + error.message; return; }
+          }
+          await this.loadJadwalRonda();
+          this.showModalRonda = false;
+        },
+        async deleteRonda(id) {
+          if (!confirm('Hapus jadwal ini?')) return;
+          const { error } = await supabaseClient.from('jadwal_ronda').delete().eq('id', id);
+          if (error) { alert('Gagal menghapus: ' + error.message); return; }
+          this.jadwalRondaList = this.jadwalRondaList.filter(j => j.id !== id);
         }
       }
     }
